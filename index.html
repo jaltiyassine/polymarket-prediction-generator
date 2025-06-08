@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polymarket Prompt Generator</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    <style>
+        body {
+            padding-top: 20px;
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 800px;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.1);
+        }
+        .conditional-field {
+            display: none;
+        }
+        #finalPromptContainer {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #e9ecef;
+            border: 1px solid #ced4da;
+            border-radius: 5px;
+        }
+        #generatedPromptOutput {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow-y: auto;
+        }
+        .error-message {
+            color: red;
+            font-size: 0.9em;
+        }
+        .input-group-option {
+            display: flex;
+            margin-bottom: 0.5rem;
+        }
+        .input-group-option input {
+            flex-grow: 1;
+        }
+        .input-group-option .btn-danger {
+            margin-left: 0.5rem;
+        }
+        .prediction-results h5 {
+            color: #495057;
+            margin-bottom: 0.25rem;
+            font-size: 1.1rem;
+        }
+        .prediction-results p, .prediction-results ul {
+            margin-bottom: 1rem;
+            color: #212529;
+        }
+        .prediction-results .text-muted {
+            color: #6c757d !important;
+        }
+         .prediction-results ul {
+            padding-left: 0;
+        }
+        .prediction-results li {
+            margin-bottom: 0.25rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mb-4 text-center">Polymarket Prediction Generator</h1>
+
+        <div class="mb-3">
+            <label for="apiKey" class="form-label">Gemini API Key:*</label>
+            <input type="password" class="form-control" id="apiKey" value="AIzaSyAfUoGl0maijbFVEV47yCmtGnbhYFQ9bag" placeholder="Enter your Gemini API Key">
+            <div class="form-text">Your API key is used client-side. For production, use a backend proxy.</div>
+        </div>
+
+        <form id="promptForm">
+            <fieldset>
+                <legend class="h5">Market Details</legend>
+                <div class="mb-3">
+                    <label for="marketQuestion" class="form-label">Market Question (Exact from Polymarket):*</label>
+                    <input type="text" class="form-control" id="marketQuestion" required>
+                    <div class="error-message" id="marketQuestionError"></div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="resolutionCriteria" class="form-label">Estimated market end date:</label>
+                    <input type="text" class="form-control" id="resolutionCriteria" placeholder="Optional, but recommended">
+                </div>
+
+                <div class="mb-3">
+                    <label for="marketCategory" class="form-label">Market Category:*</label>
+                    <select class="form-select" id="marketCategory" required>
+                        <option value="" selected disabled>-- Choose One --</option>
+                        <option value="Economy">Economy</option>
+                        <option value="Elections">Elections</option>
+                        <option value="Politics">Politics</option>
+                        <option value="Tech">Tech</option>
+                        <option value="Crypto">Crypto</option>
+                        <option value="Trump">Trump</option>
+                        <option value="World">World</option>
+                    </select>
+                    <div class="error-message" id="marketCategoryError"></div>
+                </div>
+
+                <div class="mb-3 form-check">
+                    <input type="checkbox" class="form-check-input" id="isMultipleChoice">
+                    <label class="form-check-label" for="isMultipleChoice">Is this a multiple-choice market?</label>
+                </div>
+
+                <div class="mb-3 conditional-field" id="multipleChoiceOptionsGroup">
+                    <label class="form-label">Market Choices (At least 2 for multiple-choice):*</label>
+                    <div id="multipleChoiceOptionsContainer">
+                    </div>
+                    <button type="button" class="btn btn-outline-secondary btn-sm mt-2" id="addChoiceOptionBtn">Add Choice</button>
+                    <div class="error-message" id="multipleChoiceOptionsError"></div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="descriptionOfQuestion" class="form-label">Description Of The Question (Long description):*</label>
+                    <textarea class="form-control" id="descriptionOfQuestion" rows="3" required></textarea>
+                    <div class="error-message" id="descriptionOfQuestionError"></div>
+                </div>
+            </fieldset>
+
+            <fieldset class="mt-4">
+                <legend class="h5">Information Gathering</legend>
+                <div class="mb-3">
+                    <label for="timeframeShort" class="form-label">Prioritize Info From Last (e.g., "7 days", "48 hours"):*</label>
+                    <input type="text" class="form-control" id="timeframeShort" value="7 days" required>
+                    <div class="error-message" id="timeframeShortError"></div>
+                </div>
+                <div class="mb-3">
+                    <label for="timeframeBroad" class="form-label">Incorporate Developments From Last (e.g., "1 month", "3 months"):*</label>
+                    <input type="text" class="form-control" id="timeframeBroad" value="1 month" required>
+                    <div class="error-message" id="timeframeBroadError"></div>
+                </div>
+            </fieldset>
+
+            <fieldset class="mt-4">
+                <legend class="h5">Category-Specific Analysis Points</legend>
+                <p class="form-text">Modify the default points below as needed for your specific market.</p>
+
+                <div class="mb-3 conditional-field" id="analysisEconomyGroup">
+                    <label for="analysisEconomy" class="form-label">For Economy:</label>
+                    <textarea class="form-control" id="analysisEconomy" rows="3">Economic indicators (e.g., inflation, GDP, employment relevant to the question), central bank policies, market sentiment, expert economic forecasts, geopolitical impacts on the economy.</textarea>
+                </div>
+                <div class="mb-3 conditional-field" id="analysisElectionsGroup">
+                    <label for="analysisElections" class="form-label">For Elections/Trump/Politics:</label>
+                    <textarea class="form-control" id="analysisElections" rows="3">Latest polling data, media coverage sentiment (from diverse reputable sources), campaign activities/statements, endorsements, expert political analysis, social media trends (from reputable aggregators/analysts if possible), voter demographic considerations, regulatory changes affecting the election/politician.</textarea>
+                </div>
+                <div class="mb-3 conditional-field" id="analysisTechGroup">
+                    <label for="analysisTech" class="form-label">For Tech:</label>
+                    <textarea class="form-control" id="analysisTech" rows="3">Product roadmaps (if public), patent filings, supply chain news, competitor moves, reputable tech journalist opinions, pre-release reviews or benchmarks, market adoption rates, relevant regulatory news.</textarea>
+                </div>
+                <div class="mb-3 conditional-field" id="analysisCryptoGroup">
+                    <label for="analysisCrypto" class="form-label">For Crypto:</label>
+                    <textarea class="form-control" id="analysisCrypto" rows="3">Price action and volume, on-chain data (if relevant and publicly discussed), project development updates, regulatory news globally and in key jurisdictions, adoption trends, major exchange news, influential figures' statements, overall market sentiment (e.g., Fear & Greed Index if relevant).</textarea>
+                </div>
+                <div class="mb-3 conditional-field" id="analysisWorldGroup">
+                    <label for="analysisWorld" class="form-label">For World:</label>
+                    <textarea class="form-control" id="analysisWorld" rows="3">Official government statements from involved nations, reputable international news analysis, actions by international bodies (e.g., UN, NATO), expert geopolitical analysis, economic sanctions or impacts, potential escalation/de-escalation signals.</textarea>
+                </div>
+                 <div class="error-message" id="analysisPointsError"></div>
+            </fieldset>
+
+            <button type="submit" id="generate-button" class="btn btn-primary mt-4 w-100">Generate Prediction</button>
+        </form>
+
+        <div id="finalPromptContainer" style="display: none;">
+            <h3 class="mb-3">Generated Content:</h3>
+            <div id="generatedPromptOutput"></div>
+            <button id="copyPromptBtn" class="btn btn-secondary mt-2">Copy Original Prompt</button>
+            <div id="copyMessage" class="mt-2" style="font-size: 0.9em; color: green;"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const form = document.getElementById('promptForm');
+            const marketCategorySelect = document.getElementById('marketCategory');
+            const isMultipleChoiceCheckbox = document.getElementById('isMultipleChoice');
+            const multipleChoiceOptionsGroup = document.getElementById('multipleChoiceOptionsGroup');
+            const multipleChoiceOptionsContainer = document.getElementById('multipleChoiceOptionsContainer');
+            const addChoiceOptionBtn = document.getElementById('addChoiceOptionBtn');
+            const apiKeyInput = document.getElementById('apiKey');
+
+            const generateButton = document.getElementById("generate-button");
+            const finalPromptContainer = document.getElementById('finalPromptContainer');
+            const generatedPromptOutput = document.getElementById('generatedPromptOutput');
+            const finalPromptContainerHeader = finalPromptContainer.querySelector('h3');
+            const copyPromptBtn = document.getElementById('copyPromptBtn');
+            const copyMessage = document.getElementById('copyMessage');
+
+            let currentGeneratedPrompt = '';
+
+            const analysisGroups = {
+                Economy: document.getElementById('analysisEconomyGroup'),
+                Elections: document.getElementById('analysisElectionsGroup'),
+                Politics: document.getElementById('analysisElectionsGroup'),
+                Tech: document.getElementById('analysisTechGroup'),
+                Crypto: document.getElementById('analysisCryptoGroup'),
+                Trump: document.getElementById('analysisElectionsGroup'),
+                World: document.getElementById('analysisWorldGroup')
+            };
+
+            const analysisTextareas = {
+                Economy: document.getElementById('analysisEconomy'),
+                Elections: document.getElementById('analysisElections'),
+                Politics: document.getElementById('analysisElections'),
+                Tech: document.getElementById('analysisTech'),
+                Crypto: document.getElementById('analysisCrypto'),
+                Trump: document.getElementById('analysisElections'),
+                World: document.getElementById('analysisWorld')
+            };
+
+            function createChoiceInput(value = '') {
+                const optionDiv = document.createElement('div');
+                optionDiv.className = 'input-group-option';
+
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'form-control multiple-choice-option';
+                input.placeholder = `Choice ${multipleChoiceOptionsContainer.children.length + 1} text`;
+                input.value = value;
+                input.required = isMultipleChoiceCheckbox.checked;
+
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'btn btn-danger btn-sm';
+                removeBtn.textContent = 'Remove';
+                removeBtn.onclick = function() {
+                    optionDiv.remove();
+                    const inputs = multipleChoiceOptionsContainer.querySelectorAll('.multiple-choice-option');
+                    inputs.forEach((inp, index) => {
+                        inp.placeholder = `Choice ${index + 1} text`;
+                    });
+                };
+
+                optionDiv.appendChild(input);
+                optionDiv.appendChild(removeBtn);
+                multipleChoiceOptionsContainer.appendChild(optionDiv);
+            }
+
+            addChoiceOptionBtn.addEventListener('click', () => createChoiceInput());
+
+            function toggleConditionalFields() {
+                const selectedCategory = marketCategorySelect.value;
+                Object.values(analysisGroups).forEach(group => {
+                    if (group) group.style.display = 'none';
+                });
+
+                if (isMultipleChoiceCheckbox.checked) {
+                    multipleChoiceOptionsGroup.style.display = 'block';
+                    if (multipleChoiceOptionsContainer.children.length === 0) {
+                        createChoiceInput();
+                        createChoiceInput();
+                    }
+                    multipleChoiceOptionsContainer.querySelectorAll('.multiple-choice-option').forEach(input => input.required = true);
+                } else {
+                    multipleChoiceOptionsGroup.style.display = 'none';
+                    multipleChoiceOptionsContainer.querySelectorAll('.multiple-choice-option').forEach(input => input.required = false);
+                }
+
+                if (analysisGroups[selectedCategory]) {
+                    analysisGroups[selectedCategory].style.display = 'block';
+                    if (analysisTextareas[selectedCategory]) {
+                        analysisTextareas[selectedCategory].required = true;
+                    }
+                }
+                for (const category in analysisTextareas) {
+                    if (category !== selectedCategory && analysisTextareas[category]) {
+                        analysisTextareas[category].required = false;
+                    }
+                }
+            }
+
+            marketCategorySelect.addEventListener('change', toggleConditionalFields);
+            isMultipleChoiceCheckbox.addEventListener('change', toggleConditionalFields);
+            toggleConditionalFields();
+
+            function validateForm() {
+                let isValid = true;
+                document.querySelectorAll('.error-message').forEach(el => el.textContent = '');
+                const fields = [
+                    { id: 'marketQuestion', errorId: 'marketQuestionError', name: 'Market Question' },
+                    { id: 'marketCategory', errorId: 'marketCategoryError', name: 'Market Category' },
+                    { id: 'descriptionOfQuestion', errorId: 'descriptionOfQuestionError', name: 'Description of Question' },
+                    { id: 'timeframeShort', errorId: 'timeframeShortError', name: 'Short Timeframe' },
+                    { id: 'timeframeBroad', errorId: 'timeframeBroadError', name: 'Broad Timeframe' }
+                ];
+                fields.forEach(field => {
+                    const inputElement = document.getElementById(field.id);
+                    if (!inputElement.value.trim()) {
+                        document.getElementById(field.errorId).textContent = `${field.name} is required.`;
+                        isValid = false;
+                    }
+                });
+                if (isMultipleChoiceCheckbox.checked) {
+                    const choiceInputs = multipleChoiceOptionsContainer.querySelectorAll('.multiple-choice-option');
+                    let filledChoices = 0;
+                    choiceInputs.forEach(input => {
+                        if (input.value.trim()) filledChoices++;
+                        else {
+                            document.getElementById('multipleChoiceOptionsError').textContent = 'All choice fields must be filled.';
+                            isValid = false;
+                        }
+                    });
+                    if (isValid && choiceInputs.length < 2) {
+                        document.getElementById('multipleChoiceOptionsError').textContent = 'At least two choices are required.';
+                        isValid = false;
+                    }
+                }
+                const selectedCategory = marketCategorySelect.value;
+                if (selectedCategory && analysisTextareas[selectedCategory] && !analysisTextareas[selectedCategory].value.trim()) {
+                    document.getElementById('analysisPointsError').textContent = `Analysis points for ${selectedCategory} are required.`;
+                    isValid = false;
+                } else if (selectedCategory && !analysisTextareas[selectedCategory]) {
+                    document.getElementById('analysisPointsError').textContent = `No analysis points field defined for ${selectedCategory}.`;
+                    isValid = false;
+                }
+                if (!apiKeyInput.value.trim()) {
+                    alert("Gemini API Key is required.");
+                    isValid = false;
+                }
+                return isValid;
+            }
+
+            function displayOutput(content, isHtml = false) {
+                if (isHtml) {
+                    generatedPromptOutput.style.whiteSpace = 'normal';
+                    generatedPromptOutput.innerHTML = content;
+                } else {
+                    generatedPromptOutput.style.whiteSpace = 'pre-wrap';
+                    generatedPromptOutput.textContent = content;
+                }
+            }
+
+            function displayValidPrediction(predictionData) {
+                finalPromptContainerHeader.textContent = 'Prediction Analysis:';
+                let predictionHtml = '';
+                if (predictionData.prediction.type === "binary") {
+                    predictionHtml = `
+                        <p><strong>Yes:</strong> <span class="fw-bold text-success">${predictionData.prediction.yes_percentage}%</span></p>
+                        <p><strong>No:</strong> <span class="fw-bold text-danger">${predictionData.prediction.no_percentage}%</span></p>
+                    `;
+                } else if (predictionData.prediction.type === "multiple_choice" && predictionData.prediction.probabilities) {
+                    predictionHtml = `<ul class="list-unstyled">`;
+                    predictionData.prediction.probabilities.forEach(option => {
+                        predictionHtml += `<li><strong>${option.option_text}:</strong> <span class="fw-bold text-primary">${option.percentage}%</span></li>`;
+                    });
+                    predictionHtml += `</ul>`;
+                }
+
+                const htmlOutput = `
+                    <div class="prediction-results">
+                        <div class="mb-3">
+                            <h5 class="mb-1">Market Question:</h5>
+                            <p class="text-muted">${predictionData.market_question}</p>
+                        </div>
+                        <div class="mb-3">
+                            <h5 class="mb-1">Prediction:</h5>
+                            ${predictionHtml}
+                        </div>
+                        <div class="mb-3">
+                            <h5 class="mb-1">Explanation:</h5>
+                            <p>${predictionData.prediction.explanation}</p>
+                        </div>
+                        <div class="mb-3">
+                            <h5 class="mb-1">Confidence Level:</h5>
+                            <p><strong>${predictionData.prediction.confidence_level}</strong></p>
+                        </div>
+                        <div class="mb-3">
+                            <h5 class="mb-1">Uncertainties & Potential Game Changers:</h5>
+                            <p><strong>${predictionData.prediction.uncertainties_and_potential_game_changers}</strong></p>
+                        </div>
+                    </div>
+                `;
+                displayOutput(htmlOutput, true);
+            }
+
+            function tryParseCleanedJson(rawText) {
+                if (!rawText || typeof rawText !== 'string') {
+                    return null;
+                }
+                let text = rawText.trim();
+
+                try {
+                    return JSON.parse(text);
+                } catch (e1) {
+                    // Continue to next attempt
+                }
+
+                const codeBlockRegex = /^```(?:json)?\s*([\s\S]*?)\s*```$/i;
+                const match = text.match(codeBlockRegex);
+                let textToParse = text;
+
+                if (match && match[1]) {
+                    const contentInsideBlock = match[1].trim();
+                    try {
+                        return JSON.parse(contentInsideBlock);
+                    } catch (e2) {
+                        textToParse = contentInsideBlock;
+                    }
+                }
+
+                const firstBrace = textToParse.indexOf('{');
+                const lastBrace = textToParse.lastIndexOf('}');
+
+                if (firstBrace !== -1 && lastBrace > firstBrace) {
+                    const potentialJson = textToParse.substring(firstBrace, lastBrace + 1);
+                    try {
+                        return JSON.parse(potentialJson);
+                    } catch (e3) {
+                        // Fall through
+                    }
+                }
+                return null;
+            }
+
+
+            form.addEventListener('submit', async function (event) {
+                event.preventDefault();
+                if (!validateForm()) {
+                    return;
+                }
+
+                const isMultipleChoice = isMultipleChoiceCheckbox.checked;
+                const marketChoices = [];
+                if (isMultipleChoice) {
+                    multipleChoiceOptionsContainer.querySelectorAll('.multiple-choice-option').forEach(input => {
+                        marketChoices.push(input.value.trim());
+                    });
+                }
+
+                const values = {
+                    marketQuestion: document.getElementById('marketQuestion').value.trim(),
+                    resolutionCriteria: document.getElementById('resolutionCriteria').value.trim() || "Not specified.",
+                    marketCategory: document.getElementById('marketCategory').value,
+                    descriptionOfQuestion: document.getElementById('descriptionOfQuestion').value.trim(),
+                    timeframeShort: document.getElementById('timeframeShort').value.trim(),
+                    timeframeBroad: document.getElementById('timeframeBroad').value.trim(),
+                    isMultipleChoice: isMultipleChoice,
+                    marketChoices: marketChoices
+                };
+
+                let categorySpecificAnalysis = "";
+                const selectedCategory = values.marketCategory;
+                if (analysisTextareas[selectedCategory]) {
+                    categorySpecificAnalysis = analysisTextareas[selectedCategory].value.trim();
+                }
+
+                let marketOptionsSection = "";
+                if (values.isMultipleChoice && values.marketChoices.length > 0) {
+                    marketOptionsSection = `\n*   **Market Choices:** ${values.marketChoices.join(', ')}`;
+                }
+
+                let analysisBlock = "";
+                switch (values.marketCategory) {
+                    case 'Economy': analysisBlock = `*   **Category Specific Analysis (Economy):** ${analysisTextareas['Economy'].value.trim()}`; break;
+                    case 'Elections': case 'Trump': case 'Politics': analysisBlock = `*   **Category Specific Analysis (Elections/Trump/Politics):** ${analysisTextareas['Elections'].value.trim()}`; break;
+                    case 'Tech': analysisBlock = `*   **Category Specific Analysis (Tech):** ${analysisTextareas['Tech'].value.trim()}`; break;
+                    case 'Crypto': analysisBlock = `*   **Category Specific Analysis (Crypto):** ${analysisTextareas['Crypto'].value.trim()}`; break;
+                    case 'World': analysisBlock = `*   **Category Specific Analysis (World):** ${analysisTextareas['World'].value.trim()}`; break;
+                }
+
+                let predictionJsonType = "binary";
+                let predictionJsonFields = `
+    "yes_percentage": "number (0-100)",
+    "no_percentage": "number (0-100)"`;
+
+                if (values.isMultipleChoice) {
+                    predictionJsonType = "multiple_choice";
+                    const choiceProbabilitiesSchema = values.marketChoices.map(choice =>
+                        `    { "option_text": "${choice.replace(/"/g, '\\"')}", "percentage": "number (0-100)" }`
+                    ).join(',\n');
+                    predictionJsonFields = `
+    "probabilities": [
+${choiceProbabilitiesSchema}
+    ]`;
+                }
+
+
+                currentGeneratedPrompt = `
+**Objective:** Generate a highly accurate probabilistic prediction and supporting real-time data analysis for the specified market.
+
+**Role:** You are an expert prediction market analyst AI. Your goal is to synthesize all available relevant information to determine the most likely outcome(s).
+
+**Market Details:**
+*   **Market Question:** ${values.marketQuestion}
+*   **Estimated market end date:** ${values.resolutionCriteria}
+*   **Market Category:** ${values.marketCategory}${marketOptionsSection}
+*   **Description Of The Question:** "${values.descriptionOfQuestion}"
+
+**Core Instructions & Abilities to Utilize:**
+1.  **Information Gathering (Activate Real-Time Web Search & Google Search Grounding):**
+    *   Utilize **real-time web search** to gather the absolute latest news, data, official announcements, press releases, and reputable analyses pertaining *directly* to the **Market Question**, its **Market Choices** (if any), and **Description Of The Question**.
+    *   Prioritize information from the last "${values.timeframeShort}" for time-sensitive markets, but also incorporate significant recent developments from the last "${values.timeframeBroad}".
+2.  **Deep Analysis (Apply Deep Search Principles & Comprehensive Evaluation):**
+    *   Synthesize information from diverse sources.
+    *   Identify prevailing narratives, emerging trends, and any significant counter-arguments.
+    *   Analyze relevant **historical data or precedents** if applicable to the **Market Category**.
+    ${analysisBlock}
+3.  **Critical Evaluation & Source Reliability:**
+    *   Critically assess the reliability and potential biases of information sources.
+    *   Give more weight to established, reputable news outlets, official sources, peer-reviewed research (if applicable), and recognized experts in the relevant field.
+    *   Acknowledge any significant conflicting information or high degrees of uncertainty.
+
+**CRITICAL OUTPUT INSTRUCTION: YOUR *ONLY* RESPONSE MUST BE A VALID JSON OBJECT.**
+*   Do NOT use markdown code fences (e.g., \`\`\`json ... \`\`\` or \`\`\` ... \`\`\`).
+*   Do NOT include any text, explanations, apologies, or any other characters *before* or *after* the JSON object.
+*   The JSON object must strictly adhere to the following schema:
+{
+  "market_question": "${values.marketQuestion.replace(/"/g, '\\"')}",
+  "prediction": {
+    "type": "${predictionJsonType}",${predictionJsonFields},
+    "explanation": "string (A brief 2-3 sentence explanation for the prediction.)",
+    "confidence_level": "High" | "Medium" | "Low",
+    "uncertainties_and_potential_game_changers": "High" | "Medium" | "Low"
+  }
+}
+All textual values within the JSON (like market_question, explanation, option_text) should be properly escaped if they contain special characters like double quotes.
+Ensure the sum of percentages is 100 for the respective prediction type (yes/no for binary, sum of all options for multiple_choice).
+`.trim();
+
+                finalPromptContainer.style.display = 'block';
+                finalPromptContainerHeader.textContent = 'Generating Analysis...';
+                displayOutput('Generating prediction. Please wait...', false);
+                copyMessage.textContent = '';
+                copyPromptBtn.disabled = true;
+                generateButton.setAttribute("disabled", "");
+
+                const apiKey = apiKeyInput.value.trim();
+
+                try {
+                    const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+                    
+                    const requestBody = {
+                        contents: [{ parts: [{ text: currentGeneratedPrompt }] }],
+                        tools: [{ "google_search": {} }] 
+                    };
+
+                    const response = await fetch(GEMINI_API_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(requestBody),
+                    });
+
+                    copyPromptBtn.disabled = false;
+
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }));
+                        finalPromptContainerHeader.textContent = 'Analysis Error:';
+                        displayOutput(`An error occurred while generating the prediction. Status: ${response.status}\nDetails: ${errorData.error?.message || JSON.stringify(errorData)}`, false);
+                        return;
+                    }
+
+                    const data = await response.json();
+
+                    if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text) {
+                        const rawResponseText = data.candidates[0].content.parts[0].text;
+                        const predictionData = tryParseCleanedJson(rawResponseText);
+
+                        if (predictionData) {
+                            displayValidPrediction(predictionData);
+                        } else {
+                             finalPromptContainerHeader.textContent = 'Analysis Result (JSON Format Issue):';
+                             displayOutput("The AI's response was not valid JSON, even after cleaning attempts. Raw data received:\n\n" + rawResponseText, false);
+                        }
+                    } else if (data.promptFeedback && data.promptFeedback.blockReason) {
+                        finalPromptContainerHeader.textContent = 'Analysis Error: Request Blocked';
+                        displayOutput(`The analysis request was blocked. Reason: ${data.promptFeedback.blockReason}\nDetails: ${JSON.stringify(data.promptFeedback.safetyRatings, null, 2)}`, false);
+                    }
+                    else {
+                        finalPromptContainerHeader.textContent = 'Analysis Error:';
+                        displayOutput('An unexpected response structure was received from the analysis service.\n\n' + JSON.stringify(data, null, 2), false);
+                    }
+
+                } catch (error) {
+                    finalPromptContainerHeader.textContent = 'Error:';
+                    displayOutput(`A local error occurred: ${error.message}`, false);
+                    copyPromptBtn.disabled = false;
+
+                } finally {
+                    generateButton.removeAttribute("disabled");
+                }
+            });
+
+            copyPromptBtn.addEventListener('click', function() {
+                if (!currentGeneratedPrompt) {
+                    copyMessage.textContent = 'No prompt generated yet to copy.';
+                    setTimeout(() => { copyMessage.textContent = ''; }, 3000);
+                    return;
+                }
+                navigator.clipboard.writeText(currentGeneratedPrompt).then(function() {
+                    copyMessage.textContent = 'Original prompt copied to clipboard!';
+                    setTimeout(() => { copyMessage.textContent = ''; }, 3000);
+                }, function(err) {
+                    copyMessage.textContent = 'Failed to copy prompt.';
+                });
+            });
+        });
+    </script>
+</body>
+</html>
